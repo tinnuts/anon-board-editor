@@ -389,10 +389,33 @@ function renderChars(){
   `).join('');
 }
 
+// 下拉选项值：角色 id，或 “角色 id|别名乱码”
+function charOptValue(charId, alias){ return alias ? charId + '|' + alias : charId; }
+function parseCharValue(v){
+  const s = String(v||'');
+  const i = s.indexOf('|');
+  if(i < 0) return { charId:s, alias:'' };
+  return { charId:s.slice(0,i), alias:s.slice(i+1) };
+}
+// 楼层头部显示的身份文字：显示名字时用名字，选了别名则附上别名乱码
+function identityText(a){
+  if(a.showName === false) return a.code;
+  if(a.alias) return `${a.name} (${a.code})`;
+  return a.name;
+}
+
 function refreshCharSelects(){
-  const opts = db.chars.map(c=>`<option value="${c.id}">${esc(c.name)} (${esc(c.code)})</option>`).join('');
-  document.getElementById('new-thread-char').innerHTML = opts || '<option value="">请先创建角色</option>';
-  document.getElementById('post-char').innerHTML = opts;
+  const opts = db.chars.map(c=>{
+    let html = `<option value="${esc(c.id)}">${esc(c.name)} (${esc(c.code)})</option>`;
+    (c.aliases||[]).forEach(a=>{
+      html += `<option value="${esc(charOptValue(c.id, a))}">${esc(c.name)} · 别名 (${esc(a)})</option>`;
+    });
+    return html;
+  }).join('');
+  const nh = document.getElementById('new-thread-char');
+  if(nh) nh.innerHTML = opts || '<option value="">请先创建角色</option>';
+  const ph = document.getElementById('post-char');
+  if(ph) ph.innerHTML = opts;
 }
 
 // ---------- 匿名串 ----------
@@ -486,9 +509,20 @@ function deleteThread(id){
 
 function getCharDisplay(charId, snapshot){
   const c = db.chars.find(x=>x.id===charId);
-  if(c) return { name:c.name, code:c.code, color:c.color, showName:c.showName!==false };
+  if(c){
+    const snap = snapshot || {};
+    // 用了别名的楼固定在发文时的别名乱码上；其余仍跟随角色当前设置
+    const useAlias = !!(snap.alias && snap.code);
+    return {
+      name: c.name,
+      code: useAlias ? snap.code : c.code,
+      color: c.color,
+      showName: c.showName !== false,
+      alias: useAlias ? snap.alias : ''
+    };
+  }
   if(snapshot) return { ...snapshot, showName:snapshot.showName!==false };
-  return { name:'无名氏', code:'?????', color:'#888', showName:false };
+  return { name:'无名氏', code:'?????', color:'#888', showName:false, alias:'' };
 }
 
 // ---------- 编辑器 ----------
@@ -516,7 +550,7 @@ function renderPosts(){
   el.innerHTML = t.posts.map((p,idx)=>{
     const a = getCharDisplay(p.charId, p.snapshot);
     const isOP = idx===0;
-    const displayName = a.showName!==false ? a.name : a.code;
+    const displayName = identityText(a);
     const opTag = isOP ? `<span class="tag" style="background:${esc(t.opColor||'#c03c2b')};color:#fff">${esc(t.opLabel||'楼主')}</span>` : '';
     return `<div class="post">
       <div class="post-header">
@@ -544,11 +578,15 @@ function renderContent(text){
 function submitPost(){
   const t = db.threads.find(x=>x.id===currentThreadId);
   if(!t) return;
-  const charId = document.getElementById('post-char').value;
+  const picked = parseCharValue(document.getElementById('post-char').value);
+  const charId = picked.charId;
   const content = document.getElementById('post-content').value.trim();
   if(!content){ alert('内容不能为空'); return; }
   const c = db.chars.find(x=>x.id===charId);
-  const snapshot = c ? { name:c.name, code:c.code, color:c.color, showName:c.showName } : { name:'无名氏', code:'?????', color:'#888', showName:false };
+  const alias = (c && picked.alias) ? picked.alias : '';
+  const snapshot = c
+    ? { name:c.name, code: alias || c.code, color:c.color, showName:c.showName, alias }
+    : { name:'无名氏', code:'?????', color:'#888', showName:false, alias:'' };
 
   if(editingPostId){
     const p = t.posts.find(x=>x.id===editingPostId);
@@ -568,7 +606,10 @@ function editPost(id){
   const p = t.posts.find(x=>x.id===id);
   if(!p) return;
   editingPostId = id;
-  document.getElementById('post-char').value = p.charId;
+  const owner = db.chars.find(x=>x.id===p.charId);
+  const snapCode = p.snapshot ? p.snapshot.code : '';
+  const pickAlias = (owner && snapCode && (owner.aliases||[]).some(x=>x===snapCode)) ? snapCode : '';
+  document.getElementById('post-char').value = owner ? charOptValue(p.charId, pickAlias) : p.charId;
   document.getElementById('post-content').value = p.content;
   document.getElementById('post-content').focus();
 }
@@ -872,7 +913,7 @@ function renderExportPreview(){
       const idx = from-1+i;
       const a = getCharDisplay(p.charId, p.snapshot);
       const isOP = idx===0;
-      const displayName = a.showName!==false ? a.name : a.code;
+      const displayName = identityText(a);
       const floorText = isOP?'No.'+threadNoStr(t)+'000':'No.'+threadNoStr(t)+floorNo(t,idx);
       const opTagStyle = fontStyle(es.fontOpTag) + `background:${esc(t.opColor||'#c03c2b')};padding:0 6px;border-radius:3px;`;
       const opTag = isOP ? cell(opTagStyle, esc(t.opLabel||'楼主'), (fo.opTag||0)) : '';
