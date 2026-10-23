@@ -1,0 +1,17 @@
+# 本地测试产物（探针页、实测截图）
+_test/
+
+# 运行时生成
+server.pid
+*.log
+
+# 本地备份 / 导出的数据
+anon-board-backup-*.json
+
+# 单文件手机版是构建产物，用 node build-single.js 生成，放 Release 而不是仓库
+匿名版编辑器-手机版.html
+
+# 系统
+Thumbs.db
+.DS_Store
+desktop.ini

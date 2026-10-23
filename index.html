@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>匿名版编辑器</title>
+<style>
+:root{
+  --bg:#1a1b1e; --panel:#25262b; --border:#3a3b41;
+  --text:#e8e6e3; --muted:#9a9893; --accent:#c03c2b;
+  --accent2:#2b6cb0; --btn:#33343a; --btn-hover:#45464e;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Microsoft YaHei","PingFang SC",sans-serif;background:var(--bg);color:var(--text);font-size:14px}
+#app{display:flex;flex-direction:column;height:100vh}
+header{background:var(--panel);border-bottom:1px solid var(--border);padding:8px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+header h1{font-size:16px;color:var(--accent)}
+nav{display:flex;gap:4px}
+nav button{background:var(--btn);border:1px solid var(--border);color:var(--text);padding:6px 14px;cursor:pointer;border-radius:4px}
+nav button:hover{background:var(--btn-hover)}
+nav button.active{background:var(--accent);border-color:var(--accent);color:#fff}
+main{flex:1;overflow:auto;padding:16px}
+.hidden{display:none!important}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:16px;margin-bottom:16px}
+.panel h2{font-size:15px;margin-bottom:12px;color:var(--muted)}
+.form-row{display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center}
+input,select,textarea{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:4px;font-family:inherit;font-size:13px}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent2)}
+textarea{width:100%;min-height:100px;resize:vertical}
+button{background:var(--btn);border:1px solid var(--border);color:var(--text);padding:6px 14px;cursor:pointer;border-radius:4px}
+button:hover{background:var(--btn-hover)}
+button.primary{background:var(--accent2);border-color:var(--accent2);color:#fff}
+button.danger{background:var(--accent);border-color:var(--accent);color:#fff}
+button.small{padding:2px 8px;font-size:12px}
+.char-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.char-card{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px}
+.char-card .code{font-family:monospace;color:var(--accent2);font-weight:bold}
+.char-card .name{font-weight:bold;margin:4px 0}
+.char-card .meta{font-size:12px;color:var(--muted)}
+.char-card .actions{margin-top:8px;display:flex;gap:4px}
+.thread-list{display:flex;flex-direction:column;gap:8px}
+.thread-item{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;cursor:pointer}
+.thread-item:hover{border-color:var(--accent2)}
+.thread-item .title{font-weight:bold}
+.thread-item .meta{font-size:12px;color:var(--muted);margin-top:4px}
+.post{border:1px solid var(--border);background:var(--bg);border-radius:4px;padding:10px;margin-bottom:8px}
+.post-header{display:block;margin-bottom:6px;font-size:0}
+.post-header>span{display:inline-block;vertical-align:top;line-height:24px;margin-right:8px;font-size:14px}
+.post-header .name{font-weight:bold}
+.post-header .floor{font-family:monospace}
+.post-content{white-space:pre-wrap;word-break:break-word}
+.post-content img{max-width:100%;max-height:300px;display:block;margin:8px 0;border-radius:4px}
+.post-actions{margin-top:6px;display:flex;gap:4px}
+.composer{position:sticky;bottom:0;background:var(--panel);border-top:1px solid var(--border);padding:12px;margin-top:12px}
+.composer textarea{min-height:80px;margin-bottom:8px}
+.emoji-panel{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;max-height:120px;overflow:auto;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:4px}
+.emoji-panel span{cursor:pointer;padding:2px 6px;border-radius:3px;font-size:14px}
+.emoji-panel span:hover{background:var(--btn-hover)}
+.export-preview{padding:20px;margin:0 auto}
+.export-preview .xpost{margin-bottom:8px;padding:10px}
+.export-preview .xpost-header{display:block;margin-bottom:6px;font-size:0}
+.export-preview .xpost-header>span{display:inline-block;vertical-align:top}
+.export-preview .xpost img{max-width:100%;max-height:300px;display:block;margin:8px 0;border-radius:4px}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100}
+.modal-box{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:20px;max-width:90vw;max-height:90vh;overflow:auto;min-width:400px}
+.modal-box h3{margin-bottom:12px}
+.modal-box .form-row{margin-bottom:10px}
+.tag{display:inline-block;padding:1px 6px;border-radius:3px;font-size:11px;margin-left:4px}
+label.checkbox{display:flex;align-items:center;gap:4px;cursor:pointer;font-size:13px}
+input[type="color"]{width:36px;height:28px;padding:2px;cursor:pointer}
+input[type="range"]{width:100px}
+.color-hex{width:70px;font-family:monospace;font-size:12px}
+.font-group{border:1px solid var(--border);border-radius:6px;padding:10px;margin-bottom:10px}
+.font-group h4{font-size:13px;color:var(--muted);margin-bottom:8px}
+.font-group .form-row{margin-bottom:6px}
+.font-group label{font-size:12px;color:var(--muted)}
+.preview-scroll{overflow:auto;max-width:100%}
+
+/* ---------- 手机 / 窄屏适配 ---------- */
+@media (max-width: 760px){
+  #app{height:100dvh}
+  header{padding:6px 8px;gap:6px;row-gap:6px}
+  header h1{font-size:14px;flex:0 0 auto}
+  .header-spacer{display:none}
+  nav{flex-wrap:wrap;min-width:0;flex:1 1 auto}
+  nav button{padding:6px 8px;font-size:12.5px;flex:1 1 auto}
+  main{padding:8px}
+  .panel{padding:10px;margin-bottom:10px}
+  .char-grid{grid-template-columns:1fr}
+  #font-style-grid{grid-template-columns:1fr !important}
+  .form-row{gap:6px}
+  input,select,textarea{min-width:0;max-width:100%}
+  button{padding:8px 12px}
+  button.small{padding:6px 10px;font-size:13px}
+  input,select,textarea{font-size:16px} /* 16px 以下 iOS 会自动放大页面 */
+  .modal-box{min-width:0;width:94vw;max-width:none;padding:14px}
+  .emoji-panel span{padding:6px 8px;font-size:16px}
+  .emoji-panel{max-height:160px}
+  .export-preview{padding:10px}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>匿名版编辑器</h1>
+    <span id="build-tag" style="font-size:11px;color:var(--muted);font-family:monospace">build 1026a</span>
+    <nav>
+      <button data-page="threads" class="active">匿名串管理</button>
+      <button data-page="chars">角色管理</button>
+      <button data-page="editor">编辑器</button>
+      <button data-page="export">导出图片</button>
+    </nav>
+    <span class="header-spacer" style="flex:1"></span>
+    <button class="small" onclick="exportData()" title="导出全部数据到本地 JSON 文件">导出数据</button>
+    <button class="small" onclick="document.getElementById('import-file').click()" title="从本地 JSON 文件恢复数据">导入数据</button>
+    <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(this)">
+  </header>
+
+  <main>
+    <!-- 角色管理 -->
+    <div id="page-chars" class="page hidden">
+      <div class="panel">
+        <h2>新建角色（回车快速创建）</h2>
+        <div class="form-row">
+          <input id="new-char-name" placeholder="角色名（显示用）" style="width:180px">
+          <input id="new-char-color" type="color" value="#c03c2b" onchange="syncColorHex('new-char-color')">
+          <input id="new-char-color-hex" class="color-hex" value="#c03c2b" onchange="syncColorPicker('new-char-color')" placeholder="#000000">
+          <label class="checkbox"><input type="checkbox" id="new-char-showname" checked> 显示名字</label>
+          <button class="primary" onclick="createChar()">创建</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>角色列表</h2>
+        <div id="char-list" class="char-grid"></div>
+      </div>
+    </div>
+
+    <!-- 匿名串管理 -->
+    <div id="page-threads" class="page">
+      <div class="panel">
+        <h2>新建匿名串（回车快速创建）</h2>
+        <div class="form-row">
+          <input id="new-thread-title" placeholder="串标题" style="flex:1;min-width:200px">
+          <select id="new-thread-char"></select>
+        </div>
+        <div class="form-row">
+          <label>楼主标识：</label>
+          <input id="new-thread-oplabel" value="楼主" style="width:80px">
+          <input id="new-thread-opcolor" type="color" value="#c03c2b" onchange="syncColorHex('new-thread-opcolor')">
+          <input id="new-thread-opcolor-hex" class="color-hex" value="#c03c2b" onchange="syncColorPicker('new-thread-opcolor')" placeholder="#000000">
+          <button class="primary" onclick="createThread()">创建</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>我的匿名串</h2>
+        <div id="thread-list" class="thread-list"></div>
+      </div>
+    </div>
+
+    <!-- 编辑器 -->
+    <div id="page-editor" class="page hidden">
+      <div class="panel" id="editor-thread-info">
+        <h2>当前编辑</h2>
+        <div id="editor-thread-title" style="color:var(--muted)">请先在「匿名串管理」选择一个串</div>
+      </div>
+      <div id="post-list"></div>
+      <div class="composer panel" id="composer-box" style="display:none">
+        <h2>回复 / 编辑</h2>
+        <div class="form-row">
+          <select id="post-char"></select>
+          <button class="small" onclick="showEmojiPanel()">颜文字</button>
+          <button class="small" onclick="document.getElementById('img-input').click()">插入图片</button>
+          <input type="file" id="img-input" accept="image/*" style="display:none" onchange="insertImage(this)">
+        </div>
+        <div id="emoji-panel" class="emoji-panel hidden"></div>
+        <textarea id="post-content" placeholder="输入内容..."></textarea>
+        <div class="form-row">
+          <button class="primary" onclick="submitPost()">发表</button>
+          <button onclick="cancelEdit()">取消编辑</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 导出 -->
+    <div id="page-export" class="page hidden">
+      <div class="panel">
+        <h2>导出设置</h2>
+        <div class="form-row">
+          <label>选择串：</label>
+          <select id="export-thread" onchange="renderExportPreview()"></select>
+          <label>楼层：</label>
+          <input id="export-from" type="number" value="1" min="1" style="width:60px" onchange="renderExportPreview()">
+          <span>-</span>
+          <input id="export-to" type="number" value="10" min="1" style="width:60px" onchange="renderExportPreview()">
+          <label>宽度：</label>
+          <input id="export-width" type="number" value="800" min="200" max="2000" style="width:70px" onchange="renderExportPreview()">
+        </div>
+        <div class="form-row">
+          <label>整体背景：</label>
+          <input id="export-bgcolor" type="color" value="#ffffff" onchange="syncColorHex('export-bgcolor');saveExportSettings()">
+          <input id="export-bgcolor-hex" class="color-hex" value="#ffffff" onchange="syncColorPicker('export-bgcolor');saveExportSettings()">
+          <label>楼层背景：</label>
+          <input id="export-postbgcolor" type="color" value="#fafafa" onchange="syncColorHex('export-postbgcolor');saveExportSettings()">
+          <input id="export-postbgcolor-hex" class="color-hex" value="#fafafa" onchange="syncColorPicker('export-postbgcolor');saveExportSettings()">
+        </div>
+        <div class="form-row">
+          <label>边框色：</label>
+          <input id="export-bordercolor" type="color" value="#cccccc" onchange="syncColorHex('export-bordercolor');saveExportSettings()">
+          <input id="export-bordercolor-hex" class="color-hex" value="#cccccc" onchange="syncColorPicker('export-bordercolor');saveExportSettings()">
+          <label>宽：</label>
+          <input id="export-borderwidth" type="number" value="1" min="0" max="10" style="width:50px" onchange="saveExportSettings()">
+          <label>不透明：</label>
+          <input id="export-borderopacity" type="range" min="0" max="100" step="1" value="100" oninput="saveExportSettings()">
+          <label>圆角：</label>
+          <input id="export-borderradius" type="number" value="4" min="0" max="30" style="width:50px" onchange="saveExportSettings()">
+        </div>
+        <div class="form-row">
+          <label>显示边框：</label>
+          <label class="checkbox"><input type="checkbox" id="export-border-top" checked onchange="saveExportSettings()">上</label>
+          <label class="checkbox"><input type="checkbox" id="export-border-right" checked onchange="saveExportSettings()">右</label>
+          <label class="checkbox"><input type="checkbox" id="export-border-bottom" checked onchange="saveExportSettings()">下</label>
+          <label class="checkbox"><input type="checkbox" id="export-border-left" checked onchange="saveExportSettings()">左</label>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>自定义字体</h2>
+        <div class="form-row">
+          <input type="file" id="font-file-input" accept=".ttf,.otf,.woff,.woff2" style="display:none" onchange="addCustomFont(this)">
+          <button class="small" onclick="document.getElementById('font-file-input').click()">上传字体文件（ttf/otf/woff/woff2）</button>
+        </div>
+        <div class="form-row">
+          <span id="custom-font-list"></span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>字体样式</h2>
+        <div id="font-style-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px">
+          <!-- 串号 -->
+          <div class="font-group">
+            <h4>串号</h4>
+            <div class="form-row">
+              <select id="font-threadno-family" class="font-family-select" onchange="saveExportSettings()"></select>
+              <input id="font-threadno-size" type="number" value="16" min="10" max="40" style="width:50px" onchange="saveExportSettings()">
+              <label class="checkbox"><input type="checkbox" id="font-threadno-bold" checked onchange="saveExportSettings()">粗体</label>
+            </div>
+            <div class="form-row">
+              <input id="font-threadno-color" type="color" value="#2b6cb0" onchange="syncColorHex('font-threadno-color');saveExportSettings()">
+              <input id="font-threadno-color-hex" class="color-hex" value="#2b6cb0" onchange="syncColorPicker('font-threadno-color');saveExportSettings()">
+            </div>
+          </div>
+          <!-- 串标题 -->
+          <div class="font-group">
+            <h4>串标题</h4>
+            <div class="form-row">
+              <select id="font-title-family" class="font-family-select" onchange="saveExportSettings()"></select>
+              <input id="font-title-size" type="number" value="18" min="10" max="40" style="width:50px" onchange="saveExportSettings()">
+              <label class="checkbox"><input type="checkbox" id="font-title-bold" checked onchange="saveExportSettings()">粗体</label>
+            </div>
+            <div class="form-row">
+              <input id="font-title-color" type="color" value="#000000" onchange="syncColorHex('font-title-color');saveExportSettings()">
+              <input id="font-title-color-hex" class="color-hex" value="#000000" onchange="syncColorPicker('font-title-color');saveExportSettings()">
+            </div>
+          </div>
+          <!-- 楼层号 -->
+          <div class="font-group">
+            <h4>楼层号</h4>
+            <div class="form-row">
+              <select id="font-floor-family" class="font-family-select" onchange="saveExportSettings()"></select>
+              <input id="font-floor-size" type="number" value="14" min="10" max="30" style="width:50px" onchange="saveExportSettings()">
+              <label class="checkbox"><input type="checkbox" id="font-floor-bold" onchange="saveExportSettings()">粗体</label>
+            </div>
+            <div class="form-row">
+              <input id="font-floor-color" type="color" value="#2b6cb0" onchange="syncColorHex('font-floor-color');saveExportSettings()">
+              <input id="font-floor-color-hex" class="color-hex" value="#2b6cb0" onchange="syncColorPicker('font-floor-color');saveExportSettings()">
+            </div>
+          </div>
+          <!-- 角色名 -->
+          <div class="font-group">
+            <h4>角色名</h4>
+            <div class="form-row">
+              <select id="font-name-family" class="font-family-select" onchange="saveExportSettings()"></select>
+              <input id="font-name-size" type="number" value="14" min="10" max="30" style="width:50px" onchange="saveExportSettings()">
+              <label class="checkbox"><input type="checkbox" id="font-name-bold" checked onchange="saveExportSettings()">粗体</label>
+            </div>
+            <div class="form-row">
+              <input id="font-name-color" type="color" value="#c03c2b" onchange="syncColorHex('font-name-color');saveExportSettings()">
+              <input id="font-name-color-hex" class="color-hex" value="#c03c2b" onchange="syncColorPicker('font-name-color');saveExportSettings()">
+            </div>
+            <div class="form-row">
+              <label class="checkbox"><input type="checkbox" id="font-name-usecharcolor" checked onchange="saveExportSettings()">使用角色配色（覆盖上方颜色）</label>
+            </div>
+          </div>
+          <!-- 楼主标识 -->
+          <div class="font-group">
+            <h4>楼主标识</h4>
+            <div class="form-row">
+              <select id="font-optag-family" class="font-family-select" onchange="saveExportSettings()"></select>
+              <input id="font-optag-size" type="number" value="11" min="8" max="20" style="width:50px" onchange="saveExportSettings()">
+              <label class="checkbox"><input type="checkbox" id="font-optag-bold" onchange="saveExportSettings()">粗体</label>
+            </div>
+            <div class="form-row">
+              <input id="font-optag-color" type="color" value="#ffffff" onchange="syncColorHex('font-optag-color');saveExportSettings()">
+              <input id="font-optag-color-hex" class="color-hex" value="#ffffff" onchange="syncColorPicker('font-optag-color');saveExportSettings()">
+            </div>
+          </div>
+          <!-- 正文 -->
+          <div class="font-group">
+            <h4>正文内容</h4>
+            <div class="form-row">
+              <select id="font-content-family" class="font-family-select" onchange="saveExportSettings()"></select>
+              <input id="font-content-size" type="number" value="14" min="10" max="30" style="width:50px" onchange="saveExportSettings()">
+              <label class="checkbox"><input type="checkbox" id="font-content-bold" onchange="saveExportSettings()">粗体</label>
+            </div>
+            <div class="form-row">
+              <input id="font-content-color" type="color" value="#000000" onchange="syncColorHex('font-content-color');saveExportSettings()">
+              <input id="font-content-color-hex" class="color-hex" value="#000000" onchange="syncColorPicker('font-content-color');saveExportSettings()">
+            </div>
+          </div>
+        </div>
+        <div class="form-row" style="margin-top:12px">
+          <button class="primary" onclick="doExport()">导出 PNG</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>头部对齐微调</h2>
+        <div class="form-row" style="gap:14px">
+          <label>串号 <input id="offset-threadno" type="number" value="0" min="-20" max="20" step="0.5" style="width:64px" oninput="renderExportPreview()" onchange="saveExportSettings()"> px</label>
+          <label>串标题<<input id="offset-title" type="number" value="0" min="-20" max="20" step="0.5" style="width:64px" oninput="renderExportPreview()" onchange="saveExportSettings()"> px</label>
+          <label>楼层号<<input id="offset-floor" type="number" value="0" min="-20" max="20" step="0.5" style="width:64px" oninput="renderExportPreview()" onchange="saveExportSettings()"> px</label>
+          <label>角色名<<input id="offset-name" type="number" value="0" min="-20" max="20" step="0.5" style="width:64px" oninput="renderExportPreview()" onchange="saveExportSettings()"> px</label>
+          <label>楼主标识 <input id="offset-optag" type="number" value="0" min="-20" max="20" step="0.5" style="width:64px" oninput="renderExportPreview()" onchange="saveExportSettings()"> px</label>
+        </div>
+        <div class="form-row" style="font-size:12px;color:var(--muted)">
+          正数=向下移。程序已按字体实际字形度量自动对齐中线；若仍有细微高低差，可在此手动微调。         </div>
+      </div>
+
+      <div class="panel">
+        <h2>实时预览</h2>
+        <div class="preview-scroll"><div id="export-preview" class="export-preview"></div></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- 角色编辑弹窗 -->
+<div id="char-modal" class="modal hidden">
+  <div class="modal-box">
+    <h3>编辑角色</h3>
+    <div class="form-row">
+      <label>角色名：</label>
+      <input id="edit-char-name" style="flex:1">
+    </div>
+    <div class="form-row">
+      <label>乱码：</label>
+      <input id="edit-char-code" style="width:120px;font-family:monospace">
+      <button class="small" onclick="regenCode()">重新生成</button>
+    </div>
+    <div class="form-row">
+      <label>别名：</label>
+      <input id="edit-char-alias-input" placeholder="输入别名后点添加" style="width:140px;font-family:monospace" onkeydown="if(event.key==='Enter'){event.preventDefault();addAlias();}">
+      <button class="small" onclick="regenAliasCode()" title="随机生成一个乱码别名">随机</button>
+      <button class="small" onclick="addAlias()">添加别名</button>
+    </div>
+    <div class="form-row">
+      <div id="edit-char-aliases"></div>
+    </div>
+    <div class="form-row">
+      <label>配色：</label>
+      <input id="edit-char-color" type="color" onchange="syncColorHex('edit-char-color')">
+      <input id="edit-char-color-hex" class="color-hex" onchange="syncColorPicker('edit-char-color')">
+    </div>
+    <div class="form-row">
+      <label class="checkbox"><input type="checkbox" id="edit-char-showname" checked> 在串内显示角色名（不勾选则只显示乱码）</label>
+    </div>
+    <div class="form-row">
+      <label>备注/设定：</label>
+    </div>
+    <textarea id="edit-char-desc" placeholder="角色设定、口癖、背景等"></textarea>
+    <div class="form-row" style="margin-top:12px">
+      <button class="primary" onclick="saveChar()">保存</button>
+      <button onclick="closeCharModal()">取消</button>
+      <button class="danger" onclick="deleteChar()">删除</button>
+    </div>
+  </div>
+</div>
+
+<!-- 串编辑弹窗 -->
+<div id="thread-modal" class="modal hidden">
+  <div class="modal-box">
+    <h3>编辑匿名串</h3>
+    <div class="form-row">
+      <label>串编号：</label>
+      <input id="edit-thread-no" style="width:120px;font-family:monospace">
+      <button class="small" onclick="regenThreadNo()">重新生成</button>
+    </div>
+    <div class="form-row">
+      <label>标题：</label>
+      <input id="edit-thread-title" style="flex:1">
+    </div>
+    <div class="form-row">
+      <label>楼主标识：</label>
+      <input id="edit-thread-oplabel" style="width:100px">
+      <input id="edit-thread-opcolor" type="color" onchange="syncColorHex('edit-thread-opcolor')">
+      <input id="edit-thread-opcolor-hex" class="color-hex" onchange="syncColorPicker('edit-thread-opcolor')">
+    </div>
+    <div class="form-row" style="margin-top:12px">
+      <button class="primary" onclick="saveThread()">保存</button>
+      <button onclick="closeThreadModal()">取消</button>
+    </div>
+  </div>
+</div>
+
+<script src="vendor/html2canvas.min.js"></script>
+<script src="app.js?v=1026a"></script>
+</body>
+</html>
