@@ -48,7 +48,7 @@ button.small{padding:2px 8px;font-size:12px}
 .post-header>span{display:inline-block;vertical-align:top;line-height:24px;margin-right:8px;font-size:14px}
 .post-header .name{font-weight:bold}
 .post-header .floor{font-family:monospace}
-.post-content{white-space:pre-wrap;word-break:break-word}
+.post-content{white-space:normal;word-break:break-word}
 .post-content img{max-width:100%;max-height:300px;display:block;margin:8px 0;border-radius:4px}
 .post-actions{margin-top:6px;display:flex;gap:4px}
 .composer{position:sticky;bottom:0;background:var(--panel);border-top:1px solid var(--border);padding:12px;margin-top:12px}
@@ -61,6 +61,27 @@ button.small{padding:2px 8px;font-size:12px}
 .export-preview .xpost-header{display:block;margin-bottom:6px;font-size:0}
 .export-preview .xpost-header>span{display:inline-block;vertical-align:top}
 .export-preview .xpost img{max-width:100%;max-height:300px;display:block;margin:8px 0;border-radius:4px}
+/* Markdown 渲染样式（编辑器与导出共用，全部用块级元素，html2canvas 才画得准） */
+.md-h1,.md-h2,.md-h3,.md-h4{font-weight:bold;margin:6px 0 4px}
+.md-h1{font-size:1.45em}
+.md-h2{font-size:1.28em}
+.md-h3{font-size:1.14em}
+.md-h4{font-size:1em}
+.md-quote{border-left:3px solid #9aa0a6;padding:2px 10px;margin:5px 0;color:#5b6068;background:rgba(127,127,127,.10)}
+.md-code{background:rgba(127,127,127,.14);padding:8px 10px;border-radius:4px;white-space:pre-wrap;word-break:break-all;font-family:monospace;font-size:.92em;margin:5px 0}
+.md-icode{background:rgba(127,127,127,.16);padding:1px 4px;border-radius:3px;font-family:monospace;font-size:.92em}
+.md-ul,.md-ol{margin:5px 0;padding-left:24px}
+.md-hr{border:0;border-top:1px solid rgba(127,127,127,.5);margin:8px 0}
+.md-gap{height:.55em}
+.ref{color:#2b6cb0;font-family:monospace}
+.ref-missing{color:#999;border-bottom:1px dashed #999}
+.ref-quote{display:inline-block;max-width:100%;vertical-align:top;border-left:3px solid #2b6cb0;background:rgba(43,108,176,.09);color:#5b6068;padding:3px 9px;margin:2px 0;font-size:.92em;word-break:break-word;border-radius:0 3px 3px 0}
+.ref-who{color:#2b6cb0;margin-right:7px}
+.board-chip{display:inline-block;background:rgba(43,108,176,.18);border:1px solid rgba(43,108,176,.55);color:#7db3e8;border-radius:10px;padding:1px 8px;font-size:11px;margin-right:6px;vertical-align:middle;font-weight:normal}
+#post-preview{margin-top:8px;padding:10px;border:1px dashed var(--border);border-radius:6px;background:var(--bg);min-height:44px;line-height:1.65;word-break:break-word}
+#post-preview img{max-width:100%;max-height:300px;display:block;margin:8px 0;border-radius:4px}
+.md-hint{font-size:11px;color:var(--muted);margin:-2px 0 8px}
+button.active{background:var(--accent2);border-color:var(--accent2);color:#fff}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100}
 .modal-box{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:20px;max-width:90vw;max-height:90vh;overflow:auto;min-width:400px}
 .modal-box h3{margin-bottom:12px}
@@ -104,7 +125,7 @@ input[type="range"]{width:100px}
 <div id="app">
   <header>
     <h1>匿名版编辑器</h1>
-    <span id="build-tag" style="font-size:11px;color:var(--muted);font-family:monospace">build 1027a</span>
+    <span id="build-tag" style="font-size:11px;color:var(--muted);font-family:monospace">build 1028a</span>
     <nav>
       <button data-page="threads" class="active">匿名串管理</button>
       <button data-page="chars">角色管理</button>
@@ -142,6 +163,7 @@ input[type="range"]{width:100px}
         <h2>新建匿名串（回车快速创建）</h2>
         <div class="form-row">
           <input id="new-thread-title" placeholder="串标题" style="flex:1;min-width:200px">
+          <select id="new-thread-board"></select>
           <select id="new-thread-char"></select>
         </div>
         <div class="form-row">
@@ -151,6 +173,14 @@ input[type="range"]{width:100px}
           <input id="new-thread-opcolor-hex" class="color-hex" value="#c03c2b" onchange="syncColorPicker('new-thread-opcolor')" placeholder="#000000">
           <button class="primary" onclick="createThread()">创建</button>
         </div>
+      </div>
+      <div class="panel">
+        <h2>板块</h2>
+        <div class="form-row">
+          <input id="new-board-name" placeholder="新板块名，回车创建" style="flex:1;min-width:160px" onkeydown="if(event.key==='Enter'){event.preventDefault();createBoard()}">
+          <button class="small" onclick="createBoard()">创建板块</button>
+        </div>
+        <div class="form-row" id="board-list" style="gap:6px"></div>
       </div>
       <div class="panel">
         <h2>我的匿名串</h2>
@@ -171,10 +201,13 @@ input[type="range"]{width:100px}
           <select id="post-char"></select>
           <button class="small" onclick="showEmojiPanel()">颜文字</button>
           <button class="small" onclick="document.getElementById('img-input').click()">插入图片</button>
+          <button class="small" id="post-preview-btn" onclick="togglePostPreview()">预览</button>
           <input type="file" id="img-input" accept="image/*" style="display:none" onchange="insertImage(this)">
         </div>
         <div id="emoji-panel" class="emoji-panel hidden"></div>
         <textarea id="post-content" placeholder="输入内容..."></textarea>
+        <div class="md-hint">支持 Markdown：**粗体** *斜体* ~~删除线~~ `代码` &gt; 引用 # 标题 - 列表 [链接](https://...) ｜ 引用楼层写 &gt;&gt;12345678（8 位楼层号，可跨串）</div>
+        <div id="post-preview" class="hidden"></div>
         <div class="form-row">
           <button class="primary" onclick="submitPost()">发表</button>
           <button onclick="cancelEdit()">取消编辑</button>
@@ -221,6 +254,14 @@ input[type="range"]{width:100px}
           <label class="checkbox"><input type="checkbox" id="export-border-right" checked onchange="saveExportSettings()">右</label>
           <label class="checkbox"><input type="checkbox" id="export-border-bottom" checked onchange="saveExportSettings()">下</label>
           <label class="checkbox"><input type="checkbox" id="export-border-left" checked onchange="saveExportSettings()">左</label>
+        </div>
+        <div class="form-row">
+          <label>楼层引用：</label>
+          <select id="export-refdisplay" onchange="setRefDisplay(this.value)">
+            <option value="full">楼层号 + 内容</option>
+            <option value="code">仅楼层号</option>
+          </select>
+          <span style="font-size:11px;color:var(--muted)">内容里写 &gt;&gt;12345678（串号 5 位 + 楼层 3 位，可跨串引用）</span>
         </div>
       </div>
 
@@ -402,6 +443,10 @@ input[type="range"]{width:100px}
       <input id="edit-thread-title" style="flex:1">
     </div>
     <div class="form-row">
+      <label>板块：</label>
+      <select id="edit-thread-board"></select>
+    </div>
+    <div class="form-row">
       <label>楼主标识：</label>
       <input id="edit-thread-oplabel" style="width:100px">
       <input id="edit-thread-opcolor" type="color" onchange="syncColorHex('edit-thread-opcolor')">
@@ -415,6 +460,6 @@ input[type="range"]{width:100px}
 </div>
 
 <script src="vendor/html2canvas.min.js"></script>
-<script src="app.js?v=1027a"></script>
+<script src="app.js?v=1028a"></script>
 </body>
 </html>

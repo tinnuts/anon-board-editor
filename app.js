@@ -8,12 +8,24 @@ let db = loadDB();
 function loadDB(){
   try{
     const raw = localStorage.getItem(LS_KEY);
-    if(raw) return JSON.parse(raw);
+    if(raw){
+      const d = JSON.parse(raw);
+      // 旧数据兼容：补齐后加的字段
+      if(!Array.isArray(d.boards)) d.boards = [];
+      if(!Array.isArray(d.chars)) d.chars = [];
+      if(!Array.isArray(d.threads)) d.threads = [];
+      if(!Array.isArray(d.customFonts)) d.customFonts = [];
+      if(!d.settings) d.settings = {};
+      if(!d.settings.refDisplay) d.settings.refDisplay = 'full';
+      if(!d.settings.emojis) d.settings.emojis = getDefaultEmojis();
+      return d;
+    }
   }catch(e){ console.error(e); }
   return {
-    chars:[], threads:[], customFonts:[],
+    chars:[], threads:[], boards:[], customFonts:[],
     settings:{
       emojis: getDefaultEmojis(),
+      refDisplay:'full',
       exportBgColor:'#ffffff',
       exportPostBgColor:'#fafafa',
       exportPostBorderColor:'#cccccc',
@@ -426,8 +438,9 @@ function createThread(){
   if(!charId){ alert('请先创建角色'); return; }
   const opLabel = document.getElementById('new-thread-oplabel').value.trim() || '楼主';
   const opColor = getColorInput('new-thread-opcolor');
+  const boardId = (document.getElementById('new-thread-board') || {}).value || '';
   const t = {
-    id:uid(), no:genNumCode(), title,
+    id:uid(), no:genNumCode(), title, boardId,
     opLabel, opColor,
     posts:[],
     createdAt:Date.now()
@@ -448,8 +461,9 @@ function renderThreads(){
   el.innerHTML = db.threads.map(t=>{
     const first = t.posts[0];
     const author = first ? getCharDisplay(first.charId, first.snapshot) : '—';
+    const bn = boardName(t.boardId);
     return `<div class="thread-item" onclick="openThread('${t.id}')">
-      <div class="title">No.${threadNoStr(t)} ${esc(t.title)}</div>
+      <div class="title">${bn?`<span class="board-chip">${esc(bn)}</span> `:''}No.${threadNoStr(t)} ${esc(t.title)}</div>
       <div class="meta">
         <span style="color:${author.color}">${author.showName!==false?author.name:author.code}</span>
         <span class="code">${author.code}</span>
@@ -466,6 +480,8 @@ function openThreadEditModal(id){
   const t = db.threads.find(x=>x.id===id);
   if(!t) return;
   editingThreadId = id;
+  refreshBoardSelects();
+  document.getElementById('edit-thread-board').value = t.boardId || '';
   document.getElementById('edit-thread-no').value = t.no;
   document.getElementById('edit-thread-title').value = t.title;
   document.getElementById('edit-thread-oplabel').value = t.opLabel || '楼主';
@@ -484,6 +500,7 @@ function saveThread(){
   const t = db.threads.find(x=>x.id===editingThreadId);
   if(!t) return;
   t.no = document.getElementById('edit-thread-no').value.trim() || genNumCode();
+  t.boardId = (document.getElementById('edit-thread-board') || {}).value || '';
   t.title = document.getElementById('edit-thread-title').value.trim() || t.title;
   t.opLabel = document.getElementById('edit-thread-oplabel').value.trim() || '楼主';
   t.opColor = getColorInput('edit-thread-opcolor');
@@ -491,8 +508,7 @@ function saveThread(){
   closeThreadModal();
   renderThreads();
   if(currentThreadId===editingThreadId){
-    document.getElementById('editor-thread-title').innerHTML =
-      `<strong style="color:var(--accent2)">No.${threadNoStr(t)}</strong> ${esc(t.title)}`;
+    refreshEditorHeader();
     renderPosts();
   }
   refreshExportSelect();
@@ -529,14 +545,23 @@ function getCharDisplay(charId, snapshot){
 let currentThreadId = null;
 let editingPostId = null;
 
+function refreshEditorHeader(){
+  const el = document.getElementById('editor-thread-title');
+  const t = db.threads.find(x=>x.id===currentThreadId);
+  if(!el) return;
+  if(!t){ el.textContent = '请先在「匿名串管理」选择一个串'; return; }
+  const bn = boardName(t.boardId);
+  el.innerHTML = (bn ? `<span class="board-chip">${esc(bn)}</span> ` : '')
+    + `<strong style="color:var(--accent2)">No.${threadNoStr(t)}</strong> ${esc(t.title)}`;
+}
+
 function openThread(id){
   currentThreadId = id;
   editingPostId = null;
   switchPage('editor');
   const t = db.threads.find(x=>x.id===id);
   if(!t) return;
-  document.getElementById('editor-thread-title').innerHTML =
-    `<strong style="color:var(--accent2)">No.${threadNoStr(t)}</strong> ${esc(t.title)}`;
+  refreshEditorHeader();
   document.getElementById('composer-box').style.display = 'block';
   document.getElementById('post-content').value = '';
   renderPosts();
@@ -568,11 +593,212 @@ function renderPosts(){
   refreshExportRange();
 }
 
-function renderContent(text){
-  let html = esc(text);
-  html = html.replace(/\[img:([^\]]+)\]/g, '<img src="$1" alt="img">');
-  html = html.replace(/\n/g,'<br>');
+// ---------- 板块 ----------
+function boardName(id){
+  const b = db.boards.find(x=>x.id===id);
+  return b ? b.name : '';
+}
+function createBoard(){
+  const el = document.getElementById('new-board-name');
+  const name = el.value.trim();
+  if(!name){ alert('请输入板块名'); return; }
+  if(db.boards.some(b=>b.name===name)){ alert('板块名已存在'); return; }
+  db.boards.push({ id:uid(), name });
+  el.value = '';
+  saveDB(); renderBoards(); refreshBoardSelects();
+}
+function renameBoard(id){
+  const b = db.boards.find(x=>x.id===id);
+  if(!b) return;
+  const name = prompt('板块名', b.name);
+  if(name === null) return;
+  const v = name.trim();
+  if(!v || v === b.name) return;
+  if(db.boards.some(x=>x.id!==id && x.name===v)){ alert('板块名已存在'); return; }
+  b.name = v;
+  saveDB(); renderBoards(); refreshBoardSelects(); renderThreads(); renderExportPreview();
+  if(currentThreadId) refreshEditorHeader();
+}
+function deleteBoard(id){
+  const b = db.boards.find(x=>x.id===id);
+  if(!b) return;
+  if(!confirm(`删除板块「${b.name}」？属于它的串会变成「无板块」。`)) return;
+  db.boards = db.boards.filter(x=>x.id!==id);
+  db.threads.forEach(t=>{ if(t.boardId===id) t.boardId=''; });
+  saveDB(); renderBoards(); refreshBoardSelects(); renderThreads(); renderExportPreview();
+  if(currentThreadId) refreshEditorHeader();
+}
+function renderBoards(){
+  const el = document.getElementById('board-list');
+  if(!el) return;
+  el.innerHTML = db.boards.length
+    ? db.boards.map(b=>`<span class="board-chip"><span>${esc(b.name)}</span>
+        <button class="small" onclick="renameBoard('${b.id}')">改名</button>
+        <button class="small danger" onclick="deleteBoard('${b.id}')">删除</button></span>`).join('')
+    : '<span style="color:var(--muted);font-size:12px">还没有板块。建一个，就会出现在「新建匿名串」的下拉里，也会印在导出图片的头部。</span>';
+}
+function refreshBoardSelects(){
+  const opts = '<option value="">无板块</option>' +
+    db.boards.map(b=>`<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('');
+  ['new-thread-board','edit-thread-board'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    const cur = el.value;
+    el.innerHTML = opts;
+    el.value = (cur && db.boards.some(b=>b.id===cur)) ? cur : '';
+  });
+}
+
+// ---------- 楼层引用 ----------
+// 楼层号是 8 位：串号 5 位 + 楼层 3 位（首楼 000），可跨串引用
+function postByFloorNo(num8){
+  const s = String(num8);
+  if(!/^\d{8}$/.test(s)) return null;
+  const no = s.slice(0,5), floorStr = s.slice(5);
+  const t = db.threads.find(x=>String(x.no)===no);
+  if(!t) return null;
+  const idx = floorStr === '000' ? 0 : parseInt(floorStr, 10);
+  if(!Number.isInteger(idx) || idx < 0 || !t.posts[idx]) return null;
+  return { t, p:t.posts[idx], idx };
+}
+function refSummary(p, limit){
+  let s = String((p && p.content) || '')
+    .replace(/```[\s\S]*?```/g, '[代码]')
+    .replace(/\[img:[^\]]*\]/g, '[图片]')
+    .replace(/>>\d{8}/g, '')
+    .replace(/[#*~`>]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if(s.length > limit) s = s.slice(0, limit) + '…';
+  return s;
+}
+function refHtml(code){
+  const hit = postByFloorNo(code);
+  const plain = `<span class="ref">&gt;&gt;${code}</span>`;
+  if(!hit) return `<span class="ref ref-missing">&gt;&gt;${code}</span>`;
+  if((db.settings.refDisplay || 'full') === 'code') return plain;
+  const a = getCharDisplay(hit.p.charId, hit.p.snapshot);
+  const sum = refSummary(hit.p, 180) || '（空楼层）';
+  return plain + `<span class="ref-quote"><span class="ref-who">${esc(identityText(a))} · `
+    + `${esc(hit.t.no)}/${esc(floorNo(hit.t, hit.idx))}</span>${esc(sum)}</span>`;
+}
+
+// ---------- 内容渲染：Markdown 子集 ----------
+const MD_T = '\u0001';
+const MD_BLOCK_RE = /^(#{1,4})[ \t]+|^&gt;[ ]?|^\s*[-*+][ \t]+|^\s*\d+\.[ \t]+|^(?:---|\*\*\*|___)\s*$/;
+
+function mdInline(s){
+  let x = s;
+  const icodes = [];
+  x = x.replace(/`([^`\n]+)`/g, (m,c)=>{ icodes.push(c); return MD_T + 'i' + (icodes.length-1) + MD_T; });
+  x = x.replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>');
+  x = x.replace(/(^|[^*])\*([^*\n]+?)\*(?!\*)/g, (m,a,b)=>a + '<em>' + b + '</em>');
+  x = x.replace(/~~([^~\n]+?)~~/g, '<del>$1</del>');
+  x = x.replace(/\[([^\]\n]+?)\]\((https?:\/\/[^)\s]+)\)/gi,
+    (m,txt,url)=>`<a href="${url}" target="_blank" rel="noopener">${txt}</a>`);
+  x = x.replace(new RegExp(MD_T + 'i(\\d+)' + MD_T, 'g'), (m,i)=>`<code class="md-icode">${icodes[+i]}</code>`);
+  return x;
+}
+
+function mdToHtml(raw){
+  let s = String(raw == null ? '' : raw);
+  const fenced = [], imgs = [], refs = [];
+  // 先摘出代码块 / 图片 / 楼层引用，避免它们被后面的转义和行内语法破坏
+  s = s.replace(/```([\s\S]*?)```/g, (m,c)=>{
+    let body = c.replace(/^\r?\n/, '').replace(/\r?\n$/, '');
+    body = body.replace(/^[A-Za-z0-9_+.#-]{1,20}[ \t]*\r?\n/, ''); // 去掉 ```js 这类语言标记行
+    fenced.push(body);
+    return MD_T + 'F' + (fenced.length-1) + MD_T;
+  });
+  s = s.replace(/\[img:([^\]]+)\]/g, (m,d)=>{ imgs.push(d); return MD_T + 'I' + (imgs.length-1) + MD_T; });
+  s = s.replace(/>>(\d{8})/g, (m,n)=>{ refs.push(n); return MD_T + 'R' + (refs.length-1) + MD_T; });
+  s = esc(s);
+
+  const lines = s.split(/\r?\n/);
+  const out = [];
+  const fenceRe = new RegExp('^' + MD_T + 'F\\d+' + MD_T + '$');
+  let i = 0;
+  while(i < lines.length){
+    const line = lines[i];
+    if(line.trim() === ''){ out.push('<div class="md-gap"></div>'); i++; continue; }
+
+    const fm = line.trim().match(/^\u0001F(\d+)\u0001$/);
+    if(fm){ out.push(`<pre class="md-code">${esc(fenced[+fm[1]])}</pre>`); i++; continue; }
+
+    const h = line.match(/^(#{1,4})[ \t]+(.+)$/);
+    if(h){ out.push(`<div class="md-h${h[1].length}">${mdInline(h[2])}</div>`); i++; continue; }
+
+    if(/^(?:---|\*\*\*|___)\s*$/.test(line)){ out.push('<hr class="md-hr">'); i++; continue; }
+
+    if(/^&gt;[ ]?/.test(line)){
+      const buf = [];
+      while(i < lines.length && /^&gt;[ ]?/.test(lines[i])){
+        buf.push(mdInline(lines[i].replace(/^&gt;[ ]?/, '')));
+        i++;
+      }
+      out.push(`<div class="md-quote">${buf.join('<br>')}</div>`);
+      continue;
+    }
+    if(/^\s*[-*+][ \t]+/.test(line)){
+      const items = [];
+      while(i < lines.length && /^\s*[-*+][ \t]+/.test(lines[i])){
+        items.push(mdInline(lines[i].replace(/^\s*[-*+][ \t]+/, '')));
+        i++;
+      }
+      out.push(`<ul class="md-ul">${items.map(x=>`<li>${x}</li>`).join('')}</ul>`);
+      continue;
+    }
+    if(/^\s*\d+\.[ \t]+/.test(line)){
+      const items = [];
+      while(i < lines.length && /^\s*\d+\.[ \t]+/.test(lines[i])){
+        items.push(mdInline(lines[i].replace(/^\s*\d+\.[ \t]+/, '')));
+        i++;
+      }
+      out.push(`<ol class="md-ol">${items.map(x=>`<li>${x}</li>`).join('')}</ol>`);
+      continue;
+    }
+
+    // 普通段落：连续行用 <br> 连接
+    const para = [];
+    while(i < lines.length){
+      const ln = lines[i];
+      if(ln.trim() === '') break;
+      if(fenceRe.test(ln.trim())) break;
+      if(MD_BLOCK_RE.test(ln)) break;
+      para.push(mdInline(ln));
+      i++;
+    }
+    if(para.length) out.push(para.join('<br>'));
+    else { out.push(mdInline(lines[i])); i++; }
+  }
+
+  let html = out.join('\n');
+  html = html.replace(new RegExp(MD_T + 'R(\\d+)' + MD_T, 'g'), (m,k)=>refHtml(refs[+k]));
+  html = html.replace(new RegExp(MD_T + 'I(\\d+)' + MD_T, 'g'), (m,k)=>`<img src="${imgs[+k]}" alt="img">`);
   return html;
+}
+
+function renderContent(text){
+  return mdToHtml(text);
+}
+
+// ---------- 编辑器内的实时预览 ----------
+function togglePostPreview(){
+  const pv = document.getElementById('post-preview');
+  const btn = document.getElementById('post-preview-btn');
+  if(!pv) return;
+  const show = pv.classList.contains('hidden');
+  pv.classList.toggle('hidden', !show);
+  if(btn) btn.classList.toggle('active', show);
+  if(show) updatePostPreview();
+}
+function updatePostPreview(){
+  const pv = document.getElementById('post-preview');
+  if(!pv || pv.classList.contains('hidden')) return;
+  const txt = document.getElementById('post-content').value;
+  pv.innerHTML = txt.trim()
+    ? renderContent(txt)
+    : '<span style="color:var(--muted)">（这里实时显示渲染后的样子）</span>';
 }
 
 function submitPost(){
@@ -597,6 +823,7 @@ function submitPost(){
   }
   saveDB();
   document.getElementById('post-content').value = '';
+  updatePostPreview();
   renderPosts();
   renderThreads();
 }
@@ -612,6 +839,7 @@ function editPost(id){
   document.getElementById('post-char').value = owner ? charOptValue(p.charId, pickAlias) : p.charId;
   document.getElementById('post-content').value = p.content;
   document.getElementById('post-content').focus();
+  updatePostPreview();
 }
 function cancelEdit(){
   editingPostId = null;
@@ -805,6 +1033,8 @@ function saveExportSettings(){
   s.fontOpTag = getFontSettings('font-optag');
   s.fontContent = getFontSettings('font-content');
   s.nameUseCharColor = document.getElementById('font-name-usecharcolor').checked;
+  const rd = document.getElementById('export-refdisplay');
+  if(rd) s.refDisplay = rd.value === 'code' ? 'code' : 'full';
   s.fontOffset = {
     threadNo: numVal('offset-threadno', 0),
     title: numVal('offset-title', 0),
@@ -835,12 +1065,21 @@ function loadExportSettings(){
   setFontSettings('font-optag', s.fontOpTag);
   setFontSettings('font-content', s.fontContent);
   document.getElementById('font-name-usecharcolor').checked = s.nameUseCharColor !== false;
+  const rd = document.getElementById('export-refdisplay');
+  if(rd) rd.value = s.refDisplay === 'code' ? 'code' : 'full';
   const fo = s.fontOffset || {};
   [['offset-threadno',fo.threadNo],['offset-title',fo.title],['offset-floor',fo.floor],
    ['offset-name',fo.name],['offset-optag',fo.opTag]].forEach(([id,v])=>{
     const el = document.getElementById(id);
     if(el) el.value = v || 0;
   });
+}
+
+function setRefDisplay(v){
+  db.settings.refDisplay = (v === 'code') ? 'code' : 'full';
+  saveDB();
+  renderExportPreview();
+  if(currentThreadId) renderPosts();
 }
 
 function fontStyle(f){
@@ -899,15 +1138,43 @@ function renderExportPreview(){
       return +(lineH / 2 - visualCenter).toFixed(2);              // 补偿量：让视觉中心落到盒中线
     }catch(e){ return 0; }
   }
+
+  // 文本宽度实测（用于头部超宽省略；html2canvas 不认 text-overflow，必须自己截）
+  function setMFont(f){
+    mctx.font = `${f.bold?'bold ':''}${f.size}px ${(f.family||'sans-serif').replace(/["']/g,'')}`;
+  }
+  function textW(text, f){
+    try{ setMFont(f); return mctx.measureText(String(text == null ? '' : text)).width; }
+    catch(e){ return 0; }
+  }
+  function fitText(text, f, maxW){
+    const s = String(text == null ? '' : text);
+    if(maxW <= 0) return '…';
+    if(textW(s, f) <= maxW) return s;
+    let lo = 0, hi = s.length;
+    while(lo < hi){
+      const mid = Math.ceil((lo + hi) / 2);
+      if(textW(s.slice(0, mid) + '…', f) <= maxW) lo = mid;
+      else hi = mid - 1;
+    }
+    return s.slice(0, lo) + '…';
+  }
   const cell = (style, text, shift) =>
     `<span style="display:inline-block;vertical-align:top;position:relative;top:${shift||0}px;line-height:${H}px;margin-right:8px;${style}">${text}</span>`;
   const tcell = (style, text, shift) =>
     `<span style="display:inline-block;vertical-align:top;position:relative;top:${shift||0}px;line-height:${TH}px;${style}">${text}</span>`;
 
+  // 头部：板块名>>串号 串名；串名超宽时按实测宽度自动省略
+  const HEAD_PAD = 40; // .export-preview 左右各 20px 内边距
+  const bname = boardName(t.boardId);
+  const noText = (bname ? bname + '>>' : '') + 'No.' + threadNoStr(t);
+  const availTitle = Math.max(40, width - HEAD_PAD - 8 - textW(noText, es.fontThreadNo));
+  const titleText = fitText(t.title, es.fontTitle, availTitle);
+
   el.innerHTML = `
     <div style="margin-bottom:12px;font-size:0">
-      ${tcell(fontStyle(es.fontThreadNo), 'No.'+threadNoStr(t), textShift(es.fontThreadNo, 'No.'+threadNoStr(t), TH) + (fo.threadNo||0))}
-      ${tcell(fontStyle(es.fontTitle)+'margin-left:8px;', esc(t.title), textShift(es.fontTitle, t.title, TH) + (fo.title||0))}
+      ${tcell(fontStyle(es.fontThreadNo), esc(noText), textShift(es.fontThreadNo, noText, TH) + (fo.threadNo||0))}
+      ${tcell(fontStyle(es.fontTitle)+'margin-left:8px;', esc(titleText), textShift(es.fontTitle, titleText, TH) + (fo.title||0))}
     </div>
     ${slice.map((p,i)=>{
       const idx = from-1+i;
@@ -924,7 +1191,7 @@ function renderExportPreview(){
           ${cell(nameStyle, esc(displayName), textShift(es.fontName, displayName, H) + (fo.name||0))}
           ${opTag}
         </div>
-        <div style="${fontStyle(es.fontContent)};white-space:pre-wrap;word-break:break-word">${renderContent(p.content)}</div>
+        <div class="xpost-content" style="${fontStyle(es.fontContent)};white-space:normal;word-break:break-word">${renderContent(p.content)}</div>
       </div>`;
     }).join('')}
   `;
@@ -1014,8 +1281,16 @@ initFontDB().then(()=>{
   refreshFontSelects();
 });
 refreshCharSelects();
+refreshBoardSelects();
+renderBoards();
 renderThreads();
 renderChars();
+const _pc = document.getElementById('post-content');
+if(_pc) _pc.addEventListener('input', updatePostPreview);
+if(location.protocol === 'file:'){
+  const bt = document.getElementById('build-tag');
+  if(bt) bt.title = 'file:// 单文件版';
+}
 
 // html2canvas 由 index.html 内联/本地引入（单文件版则直接内联），这里只做兜底
 if(typeof html2canvas === 'undefined'){
