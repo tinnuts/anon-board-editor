@@ -665,7 +665,7 @@ function refSummary(p, limit){
   let s = String((p && p.content) || '')
     .replace(/```[\s\S]*?```/g, '[代码]')
     .replace(/\[img:[^\]]*\]/g, '[图片]')
-    .replace(/>>\d{8}/g, '')
+    .replace(/>>(?:No\.)?\d{8}/gi, '')
     .replace(/[#*~`>]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
@@ -674,13 +674,12 @@ function refSummary(p, limit){
 }
 function refHtml(code){
   const hit = postByFloorNo(code);
-  const plain = `<span class="ref">&gt;&gt;${code}</span>`;
-  if(!hit) return `<span class="ref ref-missing">&gt;&gt;${code}</span>`;
+  const plain = `<span class="ref">&gt;&gt;No.${code}</span>`;
+  if(!hit) return `<span class="ref ref-missing">&gt;&gt;No.${code}</span>`;
   if((db.settings.refDisplay || 'full') === 'code') return plain;
   const a = getCharDisplay(hit.p.charId, hit.p.snapshot);
   const sum = refSummary(hit.p, 180) || '（空楼层）';
-  return plain + `<span class="ref-quote"><span class="ref-who">${esc(identityText(a))} · `
-    + `${esc(hit.t.no)}/${esc(floorNo(hit.t, hit.idx))}</span>${esc(sum)}</span>`;
+  return plain + `<span class="ref-quote"><span class="ref-who">${esc(identityText(a))}</span>${esc(sum)}</span>`;
 }
 
 // ---------- 内容渲染：Markdown 子集 ----------
@@ -711,7 +710,7 @@ function mdToHtml(raw){
     return MD_T + 'F' + (fenced.length-1) + MD_T;
   });
   s = s.replace(/\[img:([^\]]+)\]/g, (m,d)=>{ imgs.push(d); return MD_T + 'I' + (imgs.length-1) + MD_T; });
-  s = s.replace(/>>(\d{8})/g, (m,n)=>{ refs.push(n); return MD_T + 'R' + (refs.length-1) + MD_T; });
+  s = s.replace(/>>(?:No\.)?(\d{8})/gi, (m,n)=>{ refs.push(n); return MD_T + 'R' + (refs.length-1) + MD_T; });
   s = esc(s);
 
   const lines = s.split(/\r?\n/);

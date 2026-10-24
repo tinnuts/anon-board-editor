@@ -125,7 +125,7 @@ input[type="range"]{width:100px}
 <div id="app">
   <header>
     <h1>匿名版编辑器</h1>
-    <span id="build-tag" style="font-size:11px;color:var(--muted);font-family:monospace">build 1028a</span>
+    <span id="build-tag" style="font-size:11px;color:var(--muted);font-family:monospace">build 1028b</span>
     <nav>
       <button data-page="threads" class="active">匿名串管理</button>
       <button data-page="chars">角色管理</button>
@@ -206,7 +206,7 @@ input[type="range"]{width:100px}
         </div>
         <div id="emoji-panel" class="emoji-panel hidden"></div>
         <textarea id="post-content" placeholder="输入内容..."></textarea>
-        <div class="md-hint">支持 Markdown：**粗体** *斜体* ~~删除线~~ `代码` &gt; 引用 # 标题 - 列表 [链接](https://...) ｜ 引用楼层写 &gt;&gt;12345678（8 位楼层号，可跨串）</div>
+        <div class="md-hint">支持 Markdown：**粗体** *斜体* ~~删除线~~ `代码` &gt; 引用 # 标题 - 列表 [链接](https://...) ｜ 引用楼层写 &gt;&gt;No.12345678（8 位楼层号，可跨串）</div>
         <div id="post-preview" class="hidden"></div>
         <div class="form-row">
           <button class="primary" onclick="submitPost()">发表</button>
@@ -261,7 +261,7 @@ input[type="range"]{width:100px}
             <option value="full">楼层号 + 内容</option>
             <option value="code">仅楼层号</option>
           </select>
-          <span style="font-size:11px;color:var(--muted)">内容里写 &gt;&gt;12345678（串号 5 位 + 楼层 3 位，可跨串引用）</span>
+          <span style="font-size:11px;color:var(--muted)">内容里写 &gt;&gt;No.12345678（串号 5 位 + 楼层 3 位，可跨串引用）</span>
         </div>
       </div>
 
@@ -460,6 +460,6 @@ input[type="range"]{width:100px}
 </div>
 
 <script src="vendor/html2canvas.min.js"></script>
-<script src="app.js?v=1028a"></script>
+<script src="app.js?v=1028b"></script>
 </body>
 </html>
